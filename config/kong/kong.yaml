@@ -1,0 +1,84 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: sessions-service
+    url: http://sessions:3000
+    routes:
+      - name: sessions-route
+        paths:
+          - /sessions
+        strip_path: false
+  - name: openai-service
+    url: https://example.com
+    routes:
+      - name: openai-route
+        paths:
+          - /openai
+        strip_path: true
+
+plugins:
+  - name: ai-mcp-proxy
+    route: sessions-route
+    config:
+      logging:
+        log_payloads: true
+        log_statistics: true
+      mode: conversion-listener
+      tools:
+        - description: Kong API Summit Japan 2025で開催されるセッションの一覧を取得します。
+          method: GET
+          path: /sessions
+          annotations:
+            title: get-sessions
+  - name: ai-proxy-advanced
+    route: openai-route
+    config:
+      targets:
+        - route_type: llm/v1/chat
+          auth:
+            header_name: Authorization
+            header_value: Bearer ${{ env "DECK_OPENAI_API_KEY" }}
+          logging:
+            log_payloads: true
+            log_statistics: true
+          model:
+            provider: openai
+            name: gpt-4o-mini
+            options:
+              temperature: 1.0
+              max_tokens: 4096
+              input_cost: 0.15
+              output_cost: 0.6
+  # --- Global Plugins ---
+  - name: opentelemetry
+    config:
+      traces_endpoint: http://otel-collector:4318/v1/traces
+      logs_endpoint: http://otel-collector:4318/v1/logs
+      resource_attributes:
+        service.name: kong-gateway
+      propagation:
+        extract:
+          - w3c
+        inject:
+          - preserve
+        default_format: w3c
+  - name: prometheus
+    config:
+      per_consumer: true
+      status_code_metrics: true
+      ai_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+      upstream_health_metrics: true
+      wasm_metrics: false
+  - name: http-log
+    config:
+      http_endpoint: http://fluent-bit:2020
+      custom_fields_by_lua:
+        traceid: |
+          local h = kong.request.get_header('traceparent')
+          return h:match("%-([a-f0-9]+)%-[a-f0-9]+%-")
+        spanid: |
+          local h = kong.request.get_header('traceparent')
+          return h:match("%-[a-f0-9]+%-([a-f0-9]+)%-")
