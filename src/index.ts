@@ -21,6 +21,8 @@ const sessionsRetriever = mcp(`${gatewayEndpoint}/sessions`);
 const userInput =
   "Kong API Summit Japan 2025でAIとAPIの関連性について勉強したいです。どのセッションがおすすめですか？";
 
+console.log(`[User Input]: ${userInput}`)
+
 const results = await agent({
   llm,
   telemetry, // enabled opentelemetry instrumentation.
